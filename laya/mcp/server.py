@@ -167,13 +167,14 @@ def laya_status_tool() -> str:
     description=(
         "Decide which Laya checkpoint would answer, without running a forward pass. "
         "Use this to explain routing (english vs multilingual vs typed-decisions) to the user. "
+        "Optional lang/task override routing detection. "
         + _GUARDRAILS
     ),
 )
-def laya_route_tool(state: dict, questions: dict) -> str:
+def laya_route_tool(state: dict, questions: dict, lang: str = None, task: str = None) -> str:
     """Decide which Laya checkpoint would answer, without running a forward pass."""
     router = _router_or_error()
-    return _wrap(laya_route, state=state, questions=questions, router=router)
+    return _wrap(laya_route, state=state, questions=questions, lang=lang, task=task, router=router)
 
 
 @server.tool(
@@ -183,11 +184,11 @@ def laya_route_tool(state: dict, questions: dict) -> str:
         "questions: {name: {type: 'choice'|'score'|'noul', instructions: str, criteria?: object|array}}. "
         "For noul, optional labels: {false: str, true: str} changes the model-facing option text. "
         "Returns answers with confidence, routing metadata and, when it can be read, the real "
-        "device of the checkpoint that answered. "
+        "device of the checkpoint that answered. Optional lang/task override routing detection. "
         + _GUARDRAILS
     ),
 )
-def laya_predict_tool(state: dict, questions: dict, model: str = "auto") -> str:
+def laya_predict_tool(state: dict, questions: dict, model: str = "auto", lang: str = None, task: str = None) -> str:
     """Answer typed questions (choice/score/noul) over any state in one forward pass."""
     router = _router_or_error()
     return _wrap(
@@ -195,6 +196,8 @@ def laya_predict_tool(state: dict, questions: dict, model: str = "auto") -> str:
         state=state,
         questions=questions,
         model=model,
+        lang=lang,
+        task=task,
         router=router,
     )
 
@@ -207,11 +210,11 @@ def laya_predict_tool(state: dict, questions: dict, model: str = "auto") -> str:
         "model is downloaded), then answer in one forward pass. Use this instead of "
         "laya_predict whenever a choice question has more options than the guardrails allow. "
         "Returns the answers plus per-question shortlist metadata (kept labels, cosine "
-        "scores, k, option count). "
+        "scores, k, option count). Optional lang/task override routing detection. "
         + _GUARDRAILS
     ),
 )
-def laya_shortlist_tool(state: dict, questions: dict, model: str = "auto", k: int = 20) -> str:
+def laya_shortlist_tool(state: dict, questions: dict, model: str = "auto", k: int = 20, lang: str = None, task: str = None) -> str:
     """Shortlist many-option choice questions, then answer."""
     # k's default mirrors laya.shortlist.DEFAULT_SHORTLIST_K; it is a literal
     # here so the MCP schema carries the default without importing numpy at
@@ -223,6 +226,8 @@ def laya_shortlist_tool(state: dict, questions: dict, model: str = "auto", k: in
         questions=questions,
         model=model,
         k=k,
+        lang=lang,
+        task=task,
         router=router,
     )
 
