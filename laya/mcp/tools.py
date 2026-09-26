@@ -121,6 +121,8 @@ def laya_predict(
     state: Any,
     questions: Any,
     model: Any = "auto",
+    lang: Any = None,
+    task: Any = None,
     *,
     router: Any = None,
     agent: Any = None,
@@ -137,12 +139,12 @@ def laya_predict(
         if model_name == "auto":
             if router is None:
                 raise ToolError("models_not_ready", "Router is not loaded (auto mode)")
-            return router.predict(state_d, questions_d)
+            return router.predict(state_d, questions_d, lang=lang, task=task)
         if agent is not None:
             return agent.predict(state_d, questions_d)
         if router is None:
             raise ToolError("models_not_ready", "no agent/router loaded")
-        return router.predict(state_d, questions_d, model=model_name)
+        return router.predict(state_d, questions_d, model=model_name, lang=lang, task=task)
 
     started = time.perf_counter()
     result = _run()
@@ -174,7 +176,7 @@ def laya_predict(
     return out
 
 
-def laya_route(state: Any, questions: Any, *, router: Any = None) -> dict:
+def laya_route(state: Any, questions: Any, lang: Any = None, task: Any = None, *, router: Any = None) -> dict:
     """Routing decision only: no forward pass."""
     state_d = validate_state(state)
     questions_d = validate_questions(questions)
@@ -182,7 +184,7 @@ def laya_route(state: Any, questions: Any, *, router: Any = None) -> dict:
         raise ToolError("models_not_ready", "Router is not loaded")
     if not hasattr(router, "route"):
         raise ToolError("internal_error", "router has no route() method")
-    decision = router.route(state_d, questions_d)
+    decision = router.route(state_d, questions_d, lang=lang, task=task)
     if isinstance(decision, dict):
         return {
             "model": decision.get("model"),
@@ -218,6 +220,8 @@ def laya_shortlist(
     questions: Any,
     model: Any = "auto",
     k: Any = None,
+    lang: Any = None,
+    task: Any = None,
     *,
     router: Any = None,
     agent: Any = None,
@@ -252,7 +256,7 @@ def laya_shortlist(
             raise ToolError("models_not_ready", "Router is not loaded (auto mode)")
         if not hasattr(router, "route"):
             raise ToolError("internal_error", "router has no route() method")
-        decision = router.route(state_d, questions_d)
+        decision = router.route(state_d, questions_d, lang=lang, task=task)
         if isinstance(decision, dict):
             routed = decision.get("model")
             routing = {
@@ -271,6 +275,10 @@ def laya_shortlist(
             raise ToolError("internal_error", "router.route returned no model")
         predict_target = router
         predict_kwargs: dict[str, Any] = {"model": routed}
+        if lang is not None:
+            predict_kwargs["lang"] = lang
+        if task is not None:
+            predict_kwargs["task"] = task
         embed_agent = _resident_or_load(router, routed)
     elif agent is not None:
         routing = {"model": model_name, "repo": None, "reason": "explicit model"}
@@ -283,6 +291,10 @@ def laya_shortlist(
         routing = {"model": model_name, "repo": None, "reason": "explicit model"}
         predict_target = router
         predict_kwargs = {"model": model_name}
+        if lang is not None:
+            predict_kwargs["lang"] = lang
+        if task is not None:
+            predict_kwargs["task"] = task
         embed_agent = _resident_or_load(router, model_name)
 
     if embed_fn is None:
