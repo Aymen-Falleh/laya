@@ -167,7 +167,7 @@ class FakeRouter:
                 answers[name] = {"noul": 0.892, "confidence": 0.89}
         return {"answers": answers, "routing": {"model": "english", "repo": "fake/laya", "reason": "latin script"}}
 
-    def route(self, state, questions):
+    def route(self, state, questions, **kwargs):
         class D:
             model = "multilingual"
             reason = "non-Latin script (devanagari)"
@@ -190,12 +190,37 @@ def test_shape():
         def predict(self, state, questions, **kwargs):
             return {"answers": {}, "routing": {"model": "english"}}
 
+        def route(self, state, questions, **kwargs):
+            return {"model": "multilingual", "repo": "fake/repo", "reason": "test"}
+
     out = laya_predict(STATE, QUESTIONS, model="auto", router=RouterNoAgents())
     ok("shape/predict_device_absent_when_unreadable", "device" not in out, repr(set(out)))
 
     out = laya_route(STATE, QUESTIONS, router=FakeRouter())
     ok("shape/route_dict", out == {"model": "multilingual", "repo": "fake/repo",
                                    "reason": "non-Latin script (devanagari)"})
+
+    # Test lang and task parameter forwarding
+    class CapturingRouter(FakeRouter):
+        def predict(self, state, questions, **kwargs):
+            self.predict_kwargs = kwargs
+            return super().predict(state, questions, **kwargs)
+
+        def route(self, state, questions, **kwargs):
+            self.route_kwargs = kwargs
+            return super().route(state, questions, **kwargs)
+
+    router = CapturingRouter()
+    laya_predict(STATE, QUESTIONS, model="auto", lang="de", task="typed-decisions", router=router)
+    ok("shape/predict_lang_task_forwarded", 
+       router.predict_kwargs.get("lang") == "de" and router.predict_kwargs.get("task") == "typed-decisions",
+       repr(router.predict_kwargs))
+
+    router = CapturingRouter()
+    laya_route(STATE, QUESTIONS, lang="en", task="typed-decisions", router=router)
+    ok("shape/route_lang_task_forwarded",
+       router.route_kwargs.get("lang") == "en" and router.route_kwargs.get("task") == "typed-decisions",
+       repr(router.route_kwargs))
 
     def builder(attr):
         assert attr == "triage_questions"
@@ -242,9 +267,9 @@ def test_question_forwarding():
             self.predicted_questions = received
             return super().predict(state, received, **kwargs)
 
-        def route(self, state, received):
+        def route(self, state, received, **kwargs):
             self.routed_questions = received
-            return super().route(state, received)
+            return super().route(state, received, **kwargs)
 
     router = CapturingRouter()
     laya_predict(STATE, questions, router=router)
@@ -366,7 +391,7 @@ class ShortlistRouter:
         self.seen_questions = None
         self.seen_kwargs = None
 
-    def route(self, state, questions):
+    def route(self, state, questions, **kwargs):
         return {"model": self._routed, "repo": "fake/repo", "reason": "unit-test route"}
 
     def predict(self, state, questions, **kwargs):
@@ -455,6 +480,23 @@ def test_shortlist():
     out = laya_shortlist(STATE, three, model="english", router=router, embed_fn=_raising_embed)
     ok("shortlist/default_k_passthrough", out["shortlist"]["dept"]["k"] == 20
        and out["shortlist"]["dept"]["passthrough"] is True, repr(out["shortlist"]))
+
+    # Test lang and task parameter forwarding for shortlist
+    class CapturingShortlistRouter(ShortlistRouter):
+        def route(self, state, questions, **kwargs):
+            self.route_kwargs = kwargs
+            return super().route(state, questions, **kwargs)
+
+        def predict(self, state, questions, **kwargs):
+            self.predict_kwargs = kwargs
+            return super().predict(state, questions, **kwargs)
+
+    router = CapturingShortlistRouter({"english": ShortlistAgent()})
+    laya_shortlist(STATE, small, model="auto", lang="fr", task="typed-decisions", router=router, embed_fn=_raising_embed)
+    ok("shortlist/lang_task_forwarded",
+       router.route_kwargs.get("lang") == "fr" and router.route_kwargs.get("task") == "typed-decisions"
+       and router.predict_kwargs.get("lang") == "fr" and router.predict_kwargs.get("task") == "typed-decisions",
+       repr({"route": router.route_kwargs, "predict": router.predict_kwargs}))
 
     # Shortlist path: 5 options with k=2 -> predict sees exactly the kept labels.
     calls = []
